@@ -7,7 +7,7 @@ using System.Runtime.InteropServices;
 
 namespace LyncHCI {
 
-    public delegate void SetInterfaceAvailability(LyncAvailabilityState state);
+    public delegate void SetDeviceAvailability(LyncAvailabilityState state);
 
     // Wrapper enum for the only available status
     public enum LyncAvailabilityState {
@@ -21,6 +21,14 @@ namespace LyncHCI {
     // Constructor for lync worker
     public class LyncClientWorker {
         private LyncClient _lyncClient;
+
+        public SetDeviceAvailability UpdateAvailityCallback { get; set; }
+
+        public LyncClientWorker(SetDeviceAvailability updateCallback) : this() {
+            this.UpdateAvailityCallback = updateCallback;
+            // refresh the client device
+            UpdateClient(_lyncClient.State);
+        }
 
         public LyncClientWorker() {
             //Listen for events of changes in the state of the client
@@ -54,6 +62,7 @@ namespace LyncHCI {
             // for watching out changesi 
             _lyncClient.StateChanged +=
                 new EventHandler<ClientStateChangedEventArgs>(LyncStateChanged);
+
         }
 
         /// <summary>
@@ -82,7 +91,7 @@ namespace LyncHCI {
         /// <summary>
         /// Handler for the Availability changes. Used to publish the selected availability value in Lync
         /// </summary>
-        public void AvailabilityChanged(LyncAvailabilityState state) {
+        public void UpdateLyncAvailability(LyncAvailabilityState state) {
 
             //Add the availability to the contact information items to be published
             Dictionary<PublishableContactInformationType, object> newInformation =
@@ -112,52 +121,57 @@ namespace LyncHCI {
         /// Gets the contact's current availability value from Lync and updates the corresponding elements in the user interface
         /// </summary>
         private void SetAvailability(bool isClear = false) {
-            //Get the current availability value from Lync
-            ContactAvailability currentAvailability = 0;
-            try {
-                currentAvailability = (ContactAvailability)_lyncClient.Self.Contact.GetContactInformation(ContactInformationType.Availability);
-            }
-            catch (LyncClientException e) {
-                Console.WriteLine(e);
-            }
-            catch (SystemException systemException) {
-                if (IsLyncException(systemException)) {
-                    // Log the exception thrown by the Lync Model API.
-                    Console.WriteLine("Error: " + systemException);
+
+            if (this.UpdateAvailityCallback != null) {
+                //Get the current availability value from Lync
+                ContactAvailability currentAvailability = 0;
+                LyncAvailabilityState state;
+                try {
+                    currentAvailability = (ContactAvailability)_lyncClient.Self.Contact.GetContactInformation(ContactInformationType.Availability);
                 }
-                else {
-                    // Rethrow the SystemException which did not come from the Lync Model API.
-                    throw;
+                catch (LyncClientException e) {
+                    Console.WriteLine(e);
                 }
-            }
-            /*
-            if (currentAvailability != 0) {
-                //Update the availability ComboBox with the contact's current availability.
-                switch (currentAvailability) {
-                    case ContactAvailability.TemporarilyAway:
-                    case ContactAvailability.Away:
-                        availabilityColor = Brushes.Yellow;
-                        break;
-                    case ContactAvailability.BusyIdle:
-                    case ContactAvailability.Busy:
-                        availabilityColor = Brushes.Red;
-                        break;
-                    case ContactAvailability.DoNotDisturb:
-                        availabilityColor = Brushes.DarkRed;
-                        break;
-                    case ContactAvailability.FreeIdle:
-                    case ContactAvailability.Free:
-                        availabilityColor = Brushes.LimeGreen;
-                        break;
-                    case ContactAvailability.Offline:
-                        availabilityColor = Brushes.LightSlateGray;
-                        break;
-                    default:
-                        availabilityColor = Brushes.LightSlateGray;
-                        break;
+                catch (SystemException systemException) {
+                    if (IsLyncException(systemException)) {
+                        // Log the exception thrown by the Lync Model API.
+                        Console.WriteLine("Error: " + systemException);
+                    }
+                    else {
+                        // Rethrow the SystemException which did not come from the Lync Model API.
+                        throw;
+                    }
                 }
-            }
-             */
+
+                if (currentAvailability != 0) {
+                    //Update the availability ComboBox with the contact's current availability.
+                    switch (currentAvailability) {
+                        case ContactAvailability.TemporarilyAway:
+                        case ContactAvailability.Away:
+                            state = LyncAvailabilityState.Away;
+                            break;
+                        case ContactAvailability.BusyIdle:
+                        case ContactAvailability.Busy:
+                            state = LyncAvailabilityState.Busy;
+                            break;
+                        case ContactAvailability.DoNotDisturb:
+                            state = LyncAvailabilityState.DND;
+                            break;
+                        case ContactAvailability.FreeIdle:
+                        case ContactAvailability.Free:
+                            state = LyncAvailabilityState.Free;
+                            break;
+                        case ContactAvailability.Offline:
+                            state = LyncAvailabilityState.Offline;
+                            break;
+                        default:
+                            state = LyncAvailabilityState.Offline;
+                            break;
+                    }
+                    // call the callback
+                    this.UpdateAvailityCallback(state);
+                }
+            }             
         }
 
         /// <summary>

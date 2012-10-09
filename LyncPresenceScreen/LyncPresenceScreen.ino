@@ -1,4 +1,3 @@
-// Paint application - Demonstate both TFT and Touch Screen
 //  This library is free software; you can redistribute it and/or
 //  modify it under the terms of the GNU Lesser General Public
 //  License as published by the Free Software Foundation; either
@@ -12,6 +11,7 @@
 //  You should have received a copy of the GNU Lesser General Public
 //  License along with this library; if not, write to the Free Software
 //  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
 #include <stdint.h>
 #include <TouchScreen.h> 
 #include <TFT.h>
@@ -23,7 +23,7 @@
 #define XP 17   // can be a digital pin, this is A3 
 #endif
 
-//#define DEBUG
+#define DEBUG
 
 #define TS_MINX 140 
 #define TS_MAXX 900
@@ -35,9 +35,6 @@
 #define AWAY 3
 #define DND 4
 
-
-int color = WHITE;  //Paint brush color
-
 // For better pressure precision, we need to know the resistance
 // between X+ and X- Use any multimeter to read it
 // The 2.8" TFT Touch shield has 300 ohms across the X plate
@@ -45,6 +42,8 @@ int color = WHITE;  //Paint brush color
 TouchScreen ts = TouchScreen(XP, YP, XM, YM, 300); //init TouchScreen port pins
 int currentStatus = FREE;
 int hitStatus = 0;
+char incomingByte = -1;
+String incomingMessage = "";
 
 // setup everything
 void setup()
@@ -143,8 +142,31 @@ void setStatus() {
   Serial.print(statusMessage);
 }
 
+boolean startMessage = false;
 void loop()
 {
+  hitStatus = -1;
+  incomingByte = -1;
+  // preference first for Serial input rather user input
+  if (Serial.available() > 0) {
+    // read the incoming byte:
+    incomingByte = Serial.read();
+    if(incomingByte == '[') {
+      startMessage = true;
+      incomingMessage = "";
+    }
+    incomingMessage.concat(incomingByte);
+    if(incomingByte == ']') {
+      startMessage = false;
+      Serial.println(incomingMessage);
+      if(incomingMessage=="[FREE]") hitStatus = FREE;
+      if(incomingMessage=="[BUSY]") hitStatus = BUSY;
+      if(incomingMessage=="[AWAY]") hitStatus = AWAY;
+      if(incomingMessage=="[DND]") hitStatus = DND;
+    }    
+  }
+
+
   // a point object holds x y and z coordinates.
   Point p = ts.getPoint();
   //map the ADC value read to into pixel co-ordinates
@@ -152,6 +174,7 @@ void loop()
   p.y = map(p.y, TS_MINY, TS_MAXY, 320, 0);
   // we have some minimum pressure we consider 'valid'
   // pressure of 0 means no pressing!
+
   if (p.z > ts.pressureThreshhold) {
 #ifdef DEBUG
     Serial.print("X = "); 
@@ -163,31 +186,36 @@ void loop()
 #endif
     // Determine what status was pressed
     hitStatus = getStatus(p.x, p.y);
-    if(hitStatus != 0) {
-      // clear the active status
-      switch(currentStatus) {
-      case FREE :
-        drawFree(false);
-        break;
-      case BUSY :
-        drawBusy(false);
-        break;
-      case AWAY :
-        drawAway(false);
-        break;
-      case DND :
-        drawDND(false);
-        break;
-      default :
-        break;
-      }
-      // then set the current status
-      currentStatus = hitStatus;
-      setStatus();
-      // delay for debounce
-      delay(1000);
-    }
   }
+
+  if(hitStatus > 0) {
+    // clear the active status
+    switch(currentStatus) {
+    case FREE :
+      drawFree(false);
+      break;
+    case BUSY :
+      drawBusy(false);
+      break;
+    case AWAY :
+      drawAway(false);
+      break;
+    case DND :
+      drawDND(false);
+      break;
+    default :
+      break;
+    }
+    // then set the current status
+    currentStatus = hitStatus;
+    setStatus();
+    // delay for debounce
+    delay(1000);
+  }
+
 }
+
+
+
 
 

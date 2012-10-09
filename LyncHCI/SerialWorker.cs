@@ -8,15 +8,21 @@ using System.Threading;
 
 namespace LyncHCI {
 
-    public delegate void ParseMessage(string message);
+    public delegate void ParseIncomingMessage(string message);
 
     public class SerialWorker {
 
         private SerialPort _port;
-        private ParseMessage _parseMessage;
+        private ParseIncomingMessage _parseMessage;
         private Thread _listenerThread;
+        private Tuple<char, char> _terminators;
 
-        public SerialWorker(string serialPort, ParseMessage parseMessage) {
+        public SerialWorker(string serialPort, ParseIncomingMessage parseMessage, char messageStartBit, char messageEndBit)
+            : this(serialPort, parseMessage) {
+            this._terminators = new Tuple<char, char>(messageStartBit, messageEndBit);
+        }
+
+        public SerialWorker(string serialPort, ParseIncomingMessage parseMessage) {
             this._parseMessage = parseMessage;
             this._port = new SerialPort(serialPort, 9600, Parity.None, 8, StopBits.One);
         }
@@ -41,21 +47,26 @@ namespace LyncHCI {
                             _port.Read(input, 0, bytesToRead);
                             // convert the bytes into string
                             chunk = System.Text.Encoding.UTF8.GetString(input);
-                            if (chunk.IndexOf("[") >= 0) {
-                                start = true;
+                            if (_terminators != null) {
+                                if (chunk.IndexOf(_terminators.Item1) >= 0) {
+                                    start = true;
+                                }
+                                if (start) {
+                                    message += chunk;
+                                }
+                                if (chunk.IndexOf(_terminators.Item2) >= 0) {
+                                    start = false;
+                                    // clean up code
+                                    message = message.Trim().Replace(_terminators.Item1.ToString(), "").Replace(_terminators.Item2.ToString(), "");
+                                    // call the delegate
+                                    this._parseMessage(message);
+                                    message = "";
+                                }
                             }
-                            if (start) {
-                                message += chunk;
+                            else {
+                                // send message by byte
+                                this._parseMessage(chunk);
                             }
-                            if (chunk.IndexOf("]") >= 0) {
-                                start = false;
-                                // clean up code
-                                message = message.Trim().Replace("[", "").Replace("]", "");
-                                // call the delegate
-                                this._parseMessage(message);
-                                message = "";
-                            }
-                            Console.WriteLine("");
                         }
                     }
 
@@ -67,6 +78,31 @@ namespace LyncHCI {
             }));
             // start the thread
             _listenerThread.Start();
+        }
+
+
+        /// <summary>
+        /// Send message using a string, terminators are USED. ASCII only
+        /// </summary>
+        /// <param name="message">ASCII message</param>
+        public void SendMessage(string message) {
+            if (message != null && !string.Empty.Equals(message)) {
+                if (_terminators != null) {
+                    message = string.Format("{0}{1}{2}", _terminators.Item1, message, _terminators.Item2);
+                }
+                this.SendMessage(System.Text.Encoding.ASCII.GetBytes(message));
+            }
+        }
+
+        /// <summary>
+        /// Send message using byte array, terminators are IGNORED
+        /// </summary>
+        /// <param name="message">Pure byte message</param>
+        public void SendMessage(byte[] message) {
+            if (_port.IsOpen) {
+                _port.Write(message, 0, message.Length);
+                Console.WriteLine(System.Text.Encoding.ASCII.GetString(message));
+            }
         }
 
     }
