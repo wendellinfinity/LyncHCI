@@ -6,7 +6,8 @@ using System.Text;
 namespace LyncLab {
     class Program {
         static void Main(string[] args) {
-
+            LyncRunner statusUpdate = new LyncRunner();
+            while (true) ;
         }
     }
 }
