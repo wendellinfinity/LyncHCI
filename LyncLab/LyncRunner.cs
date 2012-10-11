@@ -46,15 +46,19 @@ namespace LyncLab {
                 switch (currentAvailability) {
                     case ContactAvailability.Away:
                         // do something when away
+                        Console.WriteLine("I am Away...");
                         break;
                     case ContactAvailability.Busy:
                         // do something when busy
+                        Console.WriteLine("I am Busy!");
                         break;
                     case ContactAvailability.DoNotDisturb:
                         // do something when DND
+                        Console.WriteLine("Please DND");
                         break;
                     case ContactAvailability.Free:
                         // do something when FREE
+                        Console.WriteLine("I am Free!");
                         break;
                 }
             }
